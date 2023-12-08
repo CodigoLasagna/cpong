@@ -5,8 +5,10 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <stdio.h>
-#include <stdlib.h> /* Se añadió la inclusión para malloc y free*/
+#include <stdlib.h>
 #include <stdbool.h>
+
+#include "shaders.h"
 
 typedef struct _winConfig
 {
@@ -17,13 +19,22 @@ typedef struct _winConfig
 	float aspectRatio;
 	float aspect;
 } twinConfig;
+typedef struct _engineConfs
+{
+	SDL_Window *window;
+	SDL_GLContext glContext;
+	GLenum glewError;
+	bool quit;
+}tengineConfs;
 
 typedef twinConfig *winConfig;
+typedef tengineConfs *engineConfs;
 
 
 /*functions*/
 void prepareWin(winConfig windowConfs);
 void fixAspectRatio(winConfig windowConfs);
+int prepareEngine(engineConfs engineConfs, winConfig windowConfs);
 
 #ifdef _WIN32
 int wmain(int argc, char *argv[]) {
@@ -32,106 +43,102 @@ int wmain(int argc, char *argv[]) {
 int main(int argc, char *argv[]) {
 #endif 
 	/* Hacer declaraciones */
-	SDL_Window *window;
-	SDL_GLContext glContext;
-	winConfig mainWinConfig = malloc(sizeof(twinConfig));
-	GLenum glewError;
-	bool quit = false;
-	prepareWin(mainWinConfig);
-
-
-	/* Inicializar SDL*/
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		fprintf(stderr, "Error al inicializar SDL: %s\n", SDL_GetError());
-		return -1;
+	winConfig windowConfs = malloc(sizeof(twinConfig));
+	engineConfs engineConfs = malloc(sizeof(tengineConfs));
+	GLuint vertShader;
+	GLuint fragShader;
+	GLuint shaderProg;
+	GLuint VBO, VAO;
+	float vertices[] =
+	{
+		-0.5f, -0.5f, 0.0f,
+		 0.5f, -0.5f, 0.0f,
+		 0.5f,  0.5f, 0.0f,
+		-0.5f,  0.5f, 0.0f,
+	};
+	prepareWin(windowConfs);
+	if (prepareEngine(engineConfs, windowConfs) == -1)
+	{
+		return 0;
 	}
-
-	/* Configurar OpenGL*/
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-
-	/* Crear ventana*/
-	window = SDL_CreateWindow
-		(
-			"CPONG",
-			SDL_WINDOWPOS_CENTERED,
-			SDL_WINDOWPOS_CENTERED,
-			mainWinConfig->screenWidth, mainWinConfig->screenHeight,
-			SDL_WINDOW_OPENGL |SDL_WINDOW_RESIZABLE
-		);
-
-	if (!window) {
-		fprintf(stderr, "Error al crear la ventana: %s\n", SDL_GetError());
-		SDL_Quit();
-		return -1;
-	}
-
-	/* Crear contexto OpenGL*/
-	glContext = SDL_GL_CreateContext(window);
-	if (!glContext) {
-		fprintf(stderr, "Error al crear el contexto OpenGL: %s\n", SDL_GetError());
-		SDL_DestroyWindow(window);
-		SDL_Quit();
-		return -1;
-	}
-
-	/* Inicializar GLEW*/
-	glewError = glewInit();
-	if (glewError != GLEW_OK) {
-		fprintf(stderr, "Error al inicializar GLEW: %s\n", glewGetErrorString(glewError));
-		SDL_GL_DeleteContext(glContext);
-		SDL_DestroyWindow(window);
-		SDL_Quit();
-		return -1;
-	}
-
-	/* Configurar el color de fondo*/
-	glClearColor(0.0f, 0.5f, 0.2f, 1.0f);
-
+	/* prepare shaders */
+	vertShader = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vertShader, 1, &vertexShaderSource, NULL);
+	glCompileShader(vertShader);
+	fragShader = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fragShader, 1, &fragmentShaderSource, NULL);
+	glCompileShader(fragShader);
+	/* link shaders */
+	shaderProg = glCreateProgram();
+	glAttachShader(shaderProg, vertShader);
+	glAttachShader(shaderProg, fragShader);
+	glLinkProgram(shaderProg);
+	glDeleteShader(vertShader);
+	glDeleteShader(fragShader);
+	/* define vbo and vao */
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	/* set up vbo and vao */
+	glBindVertexArray(VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	/* unbind vao */
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+	
 	/* Bucle principal*/
-	while (!quit) {
+	while (!engineConfs->quit) {
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			switch (event.type)
 			{
 				case SDL_QUIT:
-					quit = true;
+					engineConfs->quit = true;
 					break;
 				case SDL_KEYDOWN:
 					if (event.key.keysym.sym == SDLK_q)
 					{
-						quit = true;
+						engineConfs->quit = true;
 					}
 					break;
 				case SDL_WINDOWEVENT:
 					if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
 					{
-						fixAspectRatio(mainWinConfig);
+						windowConfs->newWidth = event.window.data1;
+						windowConfs->newHeight = event.window.data2;
+						fixAspectRatio(windowConfs);
 					}
 			}
 		}
-
+		
 		/* Limpiar el búfer de color*/
+		glClearColor( 0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
-
-		/* Aquí puedes agregar el código para renderizar tu contenido*/
+		/* draw */
+		glUseProgram(shaderProg);
+		glBindVertexArray(VAO);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+		glBindVertexArray(0);
 
 		/* Intercambiar los búferes*/
-		SDL_GL_SwapWindow(window);
+		SDL_GL_SwapWindow(engineConfs->window);
 	}
 
 	/* Liberar recursos*/
-	SDL_GL_DeleteContext(glContext);
-	SDL_DestroyWindow(window);
+	SDL_GL_DeleteContext(engineConfs->glContext);
+	SDL_DestroyWindow(engineConfs->window);
 	SDL_Quit();
+	free(windowConfs);
+	free(engineConfs);
 
 	return 0;
 }
 
 void prepareWin(winConfig windowConfs)
 {
-	windowConfs->aspectRatio = 20;
+	windowConfs->aspectRatio = 1;
 	windowConfs->screenWidth = 320;
 	windowConfs->screenHeight = 180;
 	windowConfs->newWidth = 0;
@@ -161,4 +168,55 @@ void fixAspectRatio(winConfig windowConfs)
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	printf("Pantalla redimensionada\n");
+}
+
+int prepareEngine(engineConfs engineConfs, winConfig windowConfs)
+{
+	engineConfs->quit = false;
+
+
+	/* Inicializar SDL*/
+	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+		fprintf(stderr, "Error al inicializar SDL: %s\n", SDL_GetError());
+		return -1;
+	}
+
+	/* Crear ventana*/
+	engineConfs->window = SDL_CreateWindow
+		(
+			"CPONG",
+			SDL_WINDOWPOS_CENTERED,
+			SDL_WINDOWPOS_CENTERED,
+			windowConfs->screenWidth, windowConfs->screenHeight,
+			SDL_WINDOW_OPENGL |SDL_WINDOW_RESIZABLE
+		);
+
+	if (!engineConfs->window) {
+		fprintf(stderr, "Error al crear la ventana: %s\n", SDL_GetError());
+		SDL_Quit();
+		return -1;
+	}
+
+	/* Crear contexto OpenGL*/
+	engineConfs->glContext = SDL_GL_CreateContext(engineConfs->window);
+	if (!engineConfs->glContext) {
+		fprintf(stderr, "Error al crear el contexto OpenGL: %s\n", SDL_GetError());
+		SDL_DestroyWindow(engineConfs->window);
+		SDL_Quit();
+		return -1;
+	}
+
+	/* Inicializar GLEW*/
+	engineConfs->glewError = glewInit();
+	if (engineConfs->glewError != GLEW_OK) {
+		fprintf(stderr, "Error al inicializar GLEW: %s\n", glewGetErrorString(engineConfs->glewError));
+		SDL_GL_DeleteContext(engineConfs->glContext);
+		SDL_DestroyWindow(engineConfs->window);
+		SDL_Quit();
+		return -1;
+	}
+
+	/* Configurar el color de fondo*/
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	return 1;
 }

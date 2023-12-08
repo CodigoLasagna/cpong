@@ -1,8 +1,7 @@
 CXX := gcc
 CFLAGS := -g -std=gnu89 -pedantic-errors
 LDFLAGS := -lSDL2 -lSDL2main -lGLEW -lGL
-SRCE := ./source/engine/
-SRCGS := ./source/gameSnake/
+SRCE := ./
 TARGET := main
 
 SRCS := $(wildcard  *.c $(SRCE)*.c $(SRCGS)*.c)
