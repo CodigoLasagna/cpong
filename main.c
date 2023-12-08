@@ -117,10 +117,23 @@ int main(int argc, char *argv[]) {
 		glClearColor( 0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		/* draw */
-		glUseProgram(shaderProg);
-		glBindVertexArray(VAO);
-		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-		glBindVertexArray(0);
+        /* Iniciar el dibujo*/
+        glBegin(GL_QUADS);
+
+        /* Especificar vértices y colores para el cuadrado*/
+        glColor3f(1.0f, 0.0f, 0.0f);
+        glVertex2f(-0.5f, -0.5f);
+
+        glColor3f(0.0f, 1.0f, 0.0f);
+        glVertex2f(0.5f, -0.5f);
+
+        glColor3f(0.0f, 0.0f, 1.0f);
+        glVertex2f(0.5f, 0.5f);
+
+        glColor3f(1.0f, 1.0f, 1.0f);
+        glVertex2f(-0.5f, 0.5f);
+
+        glEnd();
 
 		/* Intercambiar los búferes*/
 		SDL_GL_SwapWindow(engineConfs->window);
