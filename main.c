@@ -52,6 +52,7 @@ SDL_Window *window = NULL;
 SDL_Surface *image = NULL;
 
 void handleKeyboardEvents(SDL_Event * event, tpaddle *paddle_p1, tpaddle *paddle_p2, int *value);
+void menuKeyEvents(SDL_Event * event);
 void movePaddle(tpaddle *paddle);
 void reset_game(tpaddle *paddle_p1, tpaddle *paddle_p2, tball *ball);
 
@@ -181,6 +182,8 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 	SDL_Texture *img_tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+	img_surf = IMG_Load("menu_bkg.png");
+	SDL_Texture *menu_bkg = SDL_CreateTextureFromSurface(renderer, img_surf);
 	img_surf = IMG_Load("PaddleSovietico.png");
 	paddle_p1->tex = SDL_CreateTextureFromSurface(renderer, img_surf);
 	img_surf = IMG_Load("PaddleAmericano.png");
@@ -213,17 +216,47 @@ int main(int argc, char *argv[])
 	img_surf = TTF_RenderText_Solid(font, "hello", color);
 	SDL_Texture *score_tex = SDL_CreateTextureFromSurface(renderer, img_surf);
 
-	// Blit de la imagen en la superficie
-	//SDL_Rect destination = {0, 0, image->w, image->h}; // Posición y tamaño de la imagen
-	//SDL_BlitSurface(image, NULL, surface, &destination);
-	// Actualizar la ventana con la superficie
 	SDL_UpdateWindowSurface(window);
+	SDL_Event event;
+	int menu = 1;
+
+	while (menu)
+	{
+		while (SDL_PollEvent(&event))
+		{
+			if (event.type == SDL_QUIT)
+			{
+				SDL_DestroyWindow(window);
+				SDL_Quit();
+				return 0;
+			}
+			if (event.type == SDL_KEYDOWN)
+			{
+				if (event.key.keysym.sym == SDLK_ESCAPE)
+				{
+					SDL_DestroyWindow(window);
+					SDL_Quit();
+					return 0;
+				}
+				if (event.key.keysym.sym == SDLK_RETURN)
+				{
+					menu = 0;
+				}
+			}
+		}
+
+		SDL_RenderClear(renderer);
+		
+		SDL_RenderCopy(renderer, menu_bkg, NULL, NULL);
+		
+		SDL_RenderPresent(renderer);
+	}
 
 	while (true)
 	{
 		const int windowHeight = 400; // Altura de la ventana
 		const int paddleHeight = 100; // Altura de la barra (paddle)
-		SDL_Event event;
+		
 		while (SDL_PollEvent(&event))
 		{
 			if (event.type == SDL_QUIT)
@@ -394,6 +427,12 @@ void handleKeyboardEvents(SDL_Event * event, tpaddle *paddle_p1, tpaddle *paddle
 		{
 			paddle_p2->down = 1;
 		}
+
+		if (event->key.keysym.sym == SDLK_ESCAPE)
+		{
+			SDL_DestroyWindow(window);
+			SDL_Quit();
+		}
 	}
 
 	if (event->type == SDL_KEYUP)
@@ -415,6 +454,7 @@ void handleKeyboardEvents(SDL_Event * event, tpaddle *paddle_p1, tpaddle *paddle
 			paddle_p2->down = 0;
 		}
 	}
+
 }
 
 void movePaddle(tpaddle *paddle)
