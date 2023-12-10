@@ -1,235 +1,447 @@
+#include <SDL2/SDL_error.h>
+#include <SDL2/SDL_render.h>
+#include <SDL2/SDL_surface.h>
+#include <SDL2/SDL_video.h>
+#include <SDL2/SDL_ttf.h>
 #ifdef _WIN32
 #define _UNICODE
-#endif 
+#endif
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
+#include <SDL2/SDL_mixer.h>
+#include <SDL2/SDL_image.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
 #include "shaders.h"
 
-typedef struct _winConfig
+typedef struct _paddle
 {
-	int screenWidth;
-	int screenHeight;
-	int newWidth;
-	int newHeight;
-	float aspectRatio;
-	float aspect;
-} twinConfig;
-typedef struct _engineConfs
+	float x;
+	float y;
+	float width;
+	float height;
+	int score;
+	int up;
+	int down;
+	SDL_Rect sprite;
+	SDL_Texture *tex;
+	int noted;
+} tpaddle;
+
+typedef struct _ball
 {
-	SDL_Window *window;
-	SDL_GLContext glContext;
-	GLenum glewError;
-	bool quit;
-}tengineConfs;
+	float x;
+	float y;
+	float spd_x;
+	float spd_y;
+	float r;
+	SDL_Rect sprite;
+	SDL_Texture *tex;
+	int vert_dir;
+	int hort_dir;
+} tball;
 
-typedef twinConfig *winConfig;
-typedef tengineConfs *engineConfs;
+typedef tpaddle *paddleObj;
+typedef tball *ballObj;
 
+SDL_Surface *surface = NULL;
+SDL_Window *window = NULL;
+SDL_Surface *image = NULL;
 
-/*functions*/
-void prepareWin(winConfig windowConfs);
-void fixAspectRatio(winConfig windowConfs);
-int prepareEngine(engineConfs engineConfs, winConfig windowConfs);
+void handleKeyboardEvents(SDL_Event * event, tpaddle *paddle_p1, tpaddle *paddle_p2, int *value);
+void movePaddle(tpaddle *paddle);
+void reset_game(tpaddle *paddle_p1, tpaddle *paddle_p2, tball *ball);
 
 #ifdef _WIN32
-int wmain(int argc, char *argv[]) {
-#endif 
+int wmain(int argc, char *argv[])
+{
+#endif
 #ifdef __linux__
-int main(int argc, char *argv[]) {
-#endif 
-	/* Hacer declaraciones */
-	winConfig windowConfs = malloc(sizeof(twinConfig));
-	engineConfs engineConfs = malloc(sizeof(tengineConfs));
-	GLuint vertShader;
-	GLuint fragShader;
-	GLuint shaderProg;
-	GLuint VBO, VAO;
-	float vertices[] =
-	{
-		-0.5f, -0.5f, 0.0f,
-		 0.5f, -0.5f, 0.0f,
-		 0.5f,  0.5f, 0.0f,
-		-0.5f,  0.5f, 0.0f,
-	};
-	prepareWin(windowConfs);
-	if (prepareEngine(engineConfs, windowConfs) == -1)
-	{
-		return 0;
-	}
-	/* prepare shaders */
-	vertShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(vertShader);
-	fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragShader, 1, &fragmentShaderSource, NULL);
-	glCompileShader(fragShader);
-	/* link shaders */
-	shaderProg = glCreateProgram();
-	glAttachShader(shaderProg, vertShader);
-	glAttachShader(shaderProg, fragShader);
-	glLinkProgram(shaderProg);
-	glDeleteShader(vertShader);
-	glDeleteShader(fragShader);
-	/* define vbo and vao */
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	/* set up vbo and vao */
-	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-	/* unbind vao */
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindVertexArray(0);
+
+int main(int argc, char *argv[])
+{
+#endif
+	paddleObj paddle_p1 = malloc(sizeof(tpaddle));
+	paddleObj paddle_p2 = malloc(sizeof(tpaddle));
+	ballObj ball = malloc(sizeof(tball));
+	char *p1_text_score = malloc(sizeof(char)*32);
+	char *p2_text_score = malloc(sizeof(char)*32);
+	Mix_Chunk *bounce1;
+	Mix_Chunk *russiaWins;
+	Mix_Chunk *americaWins;
+	Mix_MasterVolume(75);
+	int game_start = 0;
+	int scored = 0;
+	float mult_vert = 2.5f;
+	float mult_hor = 2.5f;
+	paddle_p1->x = 25.0f;
+	paddle_p1->y = 150.0f;
+	paddle_p1->width = 20.0f;
+	paddle_p1->height = 100.0f;
+	paddle_p1->score = 0;
+	paddle_p1->sprite.x = (int)paddle_p1->x;
+	paddle_p1->sprite.y = (int)paddle_p1->y;
+	paddle_p1->sprite.w = (int)paddle_p1->width;
+	paddle_p1->sprite.h = (int)paddle_p1->height;
+	paddle_p1->up = 0;
+	paddle_p1->down = 0;
+	paddle_p1->noted = 0;
+
+	paddle_p2->x = 750.0f;
+	paddle_p2->y = 150.0f;
+	paddle_p2->width = 20.0f;
+	paddle_p2->height = 100.0f;
+	paddle_p2->score = 0;
+	paddle_p2->sprite.x = paddle_p2->x;
+	paddle_p2->sprite.y = paddle_p2->y;
+	paddle_p2->sprite.w = paddle_p2->width;
+	paddle_p2->sprite.h = paddle_p2->height;
+	paddle_p2->up = 0;
+	paddle_p2->down = 0;
+	paddle_p2->noted = 0;
 	
-	/* Bucle principal*/
-	while (!engineConfs->quit) {
+	ball->x = 390.0f;
+	ball->y = 190.0f;
+	ball->spd_x = 2.5f;
+	ball->spd_y = 2.0f;
+	ball->r = 20;
+	ball->sprite.x = ball->x;
+	ball->sprite.y = ball->y;
+	ball->sprite.w = ball->r;
+	ball->sprite.h = ball->r;
+	ball->vert_dir = 1;
+	ball->hort_dir = 1;
+
+
+	if (SDL_Init(SDL_INIT_VIDEO) < 0)
+	{
+		printf("SDL no pudo inicializarse. Error: %s\n", SDL_GetError());
+		return -1;
+	}
+	if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
+	{
+		printf("SDL no pudo inicializar el mixer %s\n", Mix_GetError);
+		SDL_Quit();
+		return -1;
+	}
+	bounce1 = Mix_LoadWAV("bounce.wav");
+	americaWins = Mix_LoadWAV("americaWins.wav");
+	russiaWins = Mix_LoadWAV("russiaWin.wav");
+	if (!bounce1)
+	{
+		printf("No se pudo cargar el sonido %s\n", Mix_GetError);
+		Mix_CloseAudio();
+		SDL_Quit();
+		return -1;
+	}
+	if (TTF_Init() == -1)
+	{
+		printf("Error al iniciar las fuentes %s\n", TTF_GetError);
+		SDL_Quit();
+		return -1;
+	}
+
+	window = SDL_CreateWindow("Pong", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1000, 400, SDL_WINDOW_SHOWN);
+	if (!window)
+	{
+		printf("No se pudo crear la ventana SDL. Error: %s\n", SDL_GetError());
+		SDL_Quit();
+		return -1;
+	}
+
+	SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	if (!renderer) {
+		printf("Error al crear el renderer: %s\n", SDL_GetError());
+		SDL_DestroyWindow(window);
+		IMG_Quit();
+		SDL_Quit();
+		return -1;
+	}
+
+	// Superficie para dibujar
+	surface = SDL_GetWindowSurface(window);
+	if (!surface)
+	{
+		printf("No se pudo obtener la superficie de la ventana. Error: %s\n", SDL_GetError());
+		SDL_DestroyWindow(window);
+		SDL_Quit();
+		return -1;
+	}
+	SDL_Surface *img_surf = IMG_Load("background.png");
+	if (!img_surf)
+	{
+		printf("Error al cargar la imagen %s\n", IMG_GetError);
+		SDL_DestroyWindow(window);
+		SDL_DestroyRenderer(renderer);
+		IMG_Quit();
+		SDL_Quit();
+		return -1;
+	}
+	SDL_Texture *img_tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+	img_surf = IMG_Load("PaddleSovietico.png");
+	paddle_p1->tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+	img_surf = IMG_Load("PaddleAmericano.png");
+	paddle_p2->tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+	img_surf = IMG_Load("ball.png");
+	ball->tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+	SDL_FreeSurface(img_surf);
+	
+	if (!img_tex)
+	{
+		printf("Error al crear la textura %s\n", SDL_GetError());
+		SDL_DestroyWindow(window);
+		SDL_DestroyRenderer(renderer);
+		IMG_Quit();
+		SDL_Quit();
+		return -1;
+	}
+
+	TTF_Font *font = TTF_OpenFont("Strengthen.ttf", 50);
+	if (font == NULL)
+	{
+		printf("Error al cargar nuestra fuente %s\n", TTF_GetError);
+		SDL_DestroyWindow(window);
+		SDL_DestroyRenderer(renderer);
+		IMG_Quit();
+		SDL_Quit();
+		return -1;
+	}
+	SDL_Color color = {255, 255, 255, 255};
+	img_surf = TTF_RenderText_Solid(font, "hello", color);
+	SDL_Texture *score_tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+
+	// Blit de la imagen en la superficie
+	//SDL_Rect destination = {0, 0, image->w, image->h}; // Posición y tamaño de la imagen
+	//SDL_BlitSurface(image, NULL, surface, &destination);
+	// Actualizar la ventana con la superficie
+	SDL_UpdateWindowSurface(window);
+
+	while (true)
+	{
+		const int windowHeight = 400; // Altura de la ventana
+		const int paddleHeight = 100; // Altura de la barra (paddle)
 		SDL_Event event;
-		while (SDL_PollEvent(&event)) {
-			switch (event.type)
+		while (SDL_PollEvent(&event))
+		{
+			if (event.type == SDL_QUIT)
 			{
-				case SDL_QUIT:
-					engineConfs->quit = true;
-					break;
-				case SDL_KEYDOWN:
-					if (event.key.keysym.sym == SDLK_q)
-					{
-						engineConfs->quit = true;
-					}
-					break;
-				case SDL_WINDOWEVENT:
-					if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
-					{
-						windowConfs->newWidth = event.window.data1;
-						windowConfs->newHeight = event.window.data2;
-						fixAspectRatio(windowConfs);
-					}
+				SDL_DestroyWindow(window);
+				SDL_Quit();
+				return 0;
+			}
+			handleKeyboardEvents(&event, paddle_p1, paddle_p2, &game_start); // Llamar a la función para manejar eventos del teclado
+		}
+
+		// Lógica del juego
+		if (game_start)
+		{
+			ball->x += ball->spd_x*ball->hort_dir;
+			ball->y += ball->spd_y*ball->vert_dir;
+		}
+		ball->sprite.x = ball->x;
+		ball->sprite.y = ball->y;
+
+		if (ball->y >= 380 || ball->y <= 0)
+		{
+			ball->vert_dir = -ball->vert_dir;
+			Mix_PlayChannel(-1, bounce1, 0);
+		}
+
+
+		if (ball->x <= 10 && (ball->y <= paddle_p1->y || ball->y >= paddle_p1->y + paddle_p1->height))
+		{
+			reset_game(paddle_p1, paddle_p2, ball);
+			paddle_p2->score++;
+			paddle_p1->noted = 1;
+			Mix_PlayChannel(-1, americaWins, 0);
+			printf("¡Jugador 2 anotó un punto! Puntuación: Jugador 1: %d, Jugador 2: %d\n", paddle_p1->score, paddle_p2->score);
+
+			// Incrementar la velocidad de la pelota después de anotar un punto
+		 // ball->spd_y -= 0.2f; // Incremento en Y
+			printf("Velocidad X: %f, Velocidad Y: %f\n", ball->spd_x, ball->spd_y);
+			game_start = 0;
+		}
+
+		// Si la pelota cruza la línea 730 y no está cerca del paddle derecho, se reinicia
+		if (ball->x >= 780 && (ball->y <= paddle_p2->y || ball->y >= paddle_p2->y + paddle_p2->height))
+		{
+			Mix_PlayChannel(-1, russiaWins, 0);
+			reset_game(paddle_p1, paddle_p2, ball);
+			game_start = 0;
+			paddle_p1->score++;
+			paddle_p2->noted = 1;
+			printf("¡Jugador 1 anotó un punto! Puntuación: Jugador 1: %d, Jugador 2: %d\n", paddle_p1->score, paddle_p2->score);
+
+			// Incrementar la velocidad de la pelota después de anotar un punto
+			printf("Velocidad X: %f, Velocidad Y: %f\n", ball->spd_x, ball->spd_y);
+		}
+
+		if (ball->x >= paddle_p1->x && ball->x < paddle_p1->width+ball->r && ball->y + ball->r >= paddle_p1->y && ball->y <= paddle_p1->y + paddle_p1->height)
+		{
+			//ball->spd_x = -ball->spd_x;
+			ball->hort_dir = -ball->hort_dir;
+			Mix_PlayChannel(-1, bounce1, 0);
+			if (!paddle_p1->noted && !paddle_p2->noted && scored)
+			{
+				ball->spd_x /= mult_hor;
+				ball->spd_y /= mult_vert;
+				scored = 0;
+				ball->x += 8.0f;
+			}
+			if (paddle_p1->noted)
+			{
+				ball->spd_x *= mult_hor;
+				ball->spd_y *= mult_vert;
+				paddle_p1->noted = 0;
+				scored = 1;
 			}
 		}
+		if (ball->x >= paddle_p2->x - ball->r && ball->x <= paddle_p2->x && ball->y + ball->r >= paddle_p2->y && ball->y <= paddle_p2->y + paddle_p2->height)
+		{
+			ball->hort_dir = -ball->hort_dir;
+			Mix_PlayChannel(-1, bounce1, 0);
+			if (!paddle_p1->noted && !paddle_p2->noted && scored)
+			{
+				ball->spd_x /= mult_hor;
+				ball->spd_y /= mult_vert;
+				scored = 0;
+				ball->x -= 8.0f;
+			}
+			if (paddle_p2->noted)
+			{
+				ball->spd_x *= mult_vert;
+				ball->spd_y *= mult_hor;
+				paddle_p2->noted = 0;
+				scored = 1;
+			}
+		}
+
+
+		if (paddle_p1->y > windowHeight)
+		{
+			paddle_p1->y = -paddleHeight; // Si la barra sale por abajo, aparece por arriba
+		}
+		else if (paddle_p1->y < -paddleHeight)
+		{
+			paddle_p1->y = windowHeight; // Si la barra sale por arriba, aparece por abajo
+		}
+
+		if (paddle_p2->y > windowHeight)
+		{
+			paddle_p2->y = -paddleHeight; // Lo mismo para la segunda barra
+		}
+		else if (paddle_p2->y < -paddleHeight)
+		{
+			paddle_p2->y = windowHeight; // Si la barra sale por arriba, aparece por abajo
+		}
+		// En el bucle principal:
+		movePaddle(paddle_p1);
+		movePaddle(paddle_p2);
+		SDL_RenderClear(renderer);
 		
-		/* Limpiar el búfer de color*/
-		glClearColor( 0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
-		/* draw */
-        /* Iniciar el dibujo*/
-        glBegin(GL_QUADS);
-
-        /* Especificar vértices y colores para el cuadrado*/
-        glColor3f(1.0f, 0.0f, 0.0f);
-        glVertex2f(-0.5f, -0.5f);
-
-        glColor3f(0.0f, 1.0f, 0.0f);
-        glVertex2f(0.5f, -0.5f);
-
-        glColor3f(0.0f, 0.0f, 1.0f);
-        glVertex2f(0.5f, 0.5f);
-
-        glColor3f(1.0f, 1.0f, 1.0f);
-        glVertex2f(-0.5f, 0.5f);
-
-        glEnd();
-
-		/* Intercambiar los búferes*/
-		SDL_GL_SwapWindow(engineConfs->window);
+		SDL_RenderCopy(renderer, img_tex, NULL, NULL);
+		
+		SDL_RenderFillRect(renderer, &(paddle_p2->sprite));
+		
+		SDL_RenderCopy(renderer, ball->tex, NULL, &ball->sprite);
+		SDL_RenderCopy(renderer, paddle_p1->tex, NULL, &paddle_p1->sprite);
+		SDL_RenderCopy(renderer, paddle_p2->tex, NULL, &paddle_p2->sprite);
+		
+		SDL_Rect dstRect = {830, 50, 30, 50};
+		sprintf(p1_text_score, "%d", paddle_p1->score);
+		img_surf = TTF_RenderText_Solid(font, p1_text_score, color);
+		score_tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+		SDL_RenderCopy(renderer, score_tex, NULL, &dstRect);
+		dstRect.x = 940;
+		sprintf(p2_text_score, "%d", paddle_p2->score);
+		img_surf = TTF_RenderText_Solid(font, p2_text_score, color);
+		score_tex = SDL_CreateTextureFromSurface(renderer, img_surf);
+		SDL_RenderCopy(renderer, score_tex, NULL, &dstRect);
+		
+		
+		SDL_RenderPresent(renderer);
+		
+		SDL_Delay(10);
 	}
+	SDL_FreeSurface(image);
 
-	/* Liberar recursos*/
-	SDL_GL_DeleteContext(engineConfs->glContext);
-	SDL_DestroyWindow(engineConfs->window);
+	SDL_DestroyWindow(window);
 	SDL_Quit();
-	free(windowConfs);
-	free(engineConfs);
-
 	return 0;
 }
 
-void prepareWin(winConfig windowConfs)
+void handleKeyboardEvents(SDL_Event * event, tpaddle *paddle_p1, tpaddle *paddle_p2, int *game_start)
 {
-	windowConfs->aspectRatio = 1;
-	windowConfs->screenWidth = 320;
-	windowConfs->screenHeight = 180;
-	windowConfs->newWidth = 0;
-	windowConfs->newHeight = 0;
-	windowConfs->aspect = 0;
+	if (event->type == SDL_KEYDOWN)
+	{
+		*game_start = 1;
+		if (event->key.keysym.sym == SDLK_w)
+		{
+			paddle_p1->up = 1;
+		}
+		if (event->key.keysym.sym == SDLK_s)
+		{
+			paddle_p1->down = 1;
+		}
+		if (event->key.keysym.sym == SDLK_UP)
+		{
+			paddle_p2->up = 1;
+		}
+		if (event->key.keysym.sym == SDLK_DOWN)
+		{
+			paddle_p2->down = 1;
+		}
+	}
+
+	if (event->type == SDL_KEYUP)
+	{
+		if (event->key.keysym.sym == SDLK_w)
+		{
+			paddle_p1->up = 0;
+		}
+		if (event->key.keysym.sym == SDLK_s)
+		{
+			paddle_p1->down = 0;
+		}
+		if (event->key.keysym.sym == SDLK_UP)
+		{
+			paddle_p2->up = 0;
+		}
+		if (event->key.keysym.sym == SDLK_DOWN)
+		{
+			paddle_p2->down = 0;
+		}
+	}
 }
 
-void fixAspectRatio(winConfig windowConfs)
+void movePaddle(tpaddle *paddle)
 {
-	windowConfs->screenWidth = windowConfs->newWidth;
-	windowConfs->screenHeight = windowConfs->newHeight;
 
-	glViewport(0, 0, windowConfs->screenWidth, windowConfs->screenHeight);
-
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	if (windowConfs->screenWidth >= windowConfs->screenHeight * windowConfs->aspectRatio)
+	if (paddle->up)
 	{
-		windowConfs->aspect = (float) windowConfs->screenWidth / (float) windowConfs->screenHeight;
-		glOrtho(-windowConfs->aspect * windowConfs->aspectRatio, windowConfs->aspect * windowConfs->aspectRatio, -1.0, 1.0, -1.0, 1.0);
+		// Mover la raqueta izquierda hacia arriba
+		paddle->y -= 4.0f;
+		paddle->sprite.y = paddle->y;
 	}
-	else
+	if (paddle->down)
 	{
-		windowConfs->aspect = (float)windowConfs->screenHeight / (float)windowConfs->screenWidth;
-		glOrtho(-1.0, 1.0, -windowConfs->aspect / windowConfs->aspectRatio, windowConfs->aspect / windowConfs->aspectRatio, -1.0, 1.0);
+		// Mover la raqueta izquierda hacia abajo
+		paddle->y += 4.0f;
+		paddle->sprite.y = paddle->y;
 	}
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	printf("Pantalla redimensionada\n");
 }
 
-int prepareEngine(engineConfs engineConfs, winConfig windowConfs)
+void reset_game(tpaddle *paddle_p1, tpaddle *paddle_p2, tball *ball)
 {
-	engineConfs->quit = false;
-
-
-	/* Inicializar SDL*/
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		fprintf(stderr, "Error al inicializar SDL: %s\n", SDL_GetError());
-		return -1;
-	}
-
-	/* Crear ventana*/
-	engineConfs->window = SDL_CreateWindow
-		(
-			"CPONG",
-			SDL_WINDOWPOS_CENTERED,
-			SDL_WINDOWPOS_CENTERED,
-			windowConfs->screenWidth, windowConfs->screenHeight,
-			SDL_WINDOW_OPENGL |SDL_WINDOW_RESIZABLE
-		);
-
-	if (!engineConfs->window) {
-		fprintf(stderr, "Error al crear la ventana: %s\n", SDL_GetError());
-		SDL_Quit();
-		return -1;
-	}
-
-	/* Crear contexto OpenGL*/
-	engineConfs->glContext = SDL_GL_CreateContext(engineConfs->window);
-	if (!engineConfs->glContext) {
-		fprintf(stderr, "Error al crear el contexto OpenGL: %s\n", SDL_GetError());
-		SDL_DestroyWindow(engineConfs->window);
-		SDL_Quit();
-		return -1;
-	}
-
-	/* Inicializar GLEW*/
-	engineConfs->glewError = glewInit();
-	if (engineConfs->glewError != GLEW_OK) {
-		fprintf(stderr, "Error al inicializar GLEW: %s\n", glewGetErrorString(engineConfs->glewError));
-		SDL_GL_DeleteContext(engineConfs->glContext);
-		SDL_DestroyWindow(engineConfs->window);
-		SDL_Quit();
-		return -1;
-	}
-
-	/* Configurar el color de fondo*/
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	return 1;
+	ball->x = 390;
+	ball->y = 190;
+	paddle_p1->y = 150.0f;
+	paddle_p2->y = 150.0f;
+	paddle_p1->sprite.y = paddle_p1->y;
+	paddle_p2->sprite.y = paddle_p2->y;
+	ball->spd_x = 2.5f;
+	ball->spd_y = 2.0f;
 }

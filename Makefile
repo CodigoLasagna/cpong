@@ -1,6 +1,6 @@
 CXX := gcc
-CFLAGS := -g -std=gnu89 -pedantic-errors
-LDFLAGS := -lSDL2 -lSDL2main -lGLEW -lGL
+CFLAGS := 
+LDFLAGS := -lSDL2 -lSDL2main -lGLEW -lGL -lSDL2_mixer -lSDL2_image -lSDL2_ttf
 SRCE := ./
 TARGET := main
 
